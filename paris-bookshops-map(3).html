@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Librairies de Paris</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #1a1612; --paper: #f5f0e8; --cream: #ede8dc;
+    --rust: #b5401c; --gold: #c8922a; --warm-gray: #8a8070;
+    --border: rgba(26,22,18,0.12); --shadow: 0 4px 24px rgba(26,22,18,0.12);
+  }
+  html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); }
+
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: var(--ink); padding: 0 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; border-bottom: 2px solid var(--rust);
+  }
+  .logo { font-family: 'Playfair Display', serif; font-size: 1.25rem; color: var(--paper); letter-spacing: 0.02em; }
+  .logo span { color: var(--gold); font-style: italic; }
+  .header-right { display: flex; align-items: center; gap: 1rem; }
+  .header-count { font-size: 0.78rem; color: var(--warm-gray); font-weight: 300; letter-spacing: 0.04em; }
+
+  #osm-banner {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.75rem; color: var(--gold);
+    background: rgba(200,146,42,0.12); border: 1px solid rgba(200,146,42,0.3);
+    padding: 4px 12px; border-radius: 20px; transition: opacity 0.5s;
+  }
+  #osm-banner.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 12px; height: 12px; border: 2px solid rgba(200,146,42,0.3);
+    border-top-color: var(--gold); border-radius: 50%;
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .app { display: flex; height: 100vh; padding-top: 56px; }
+
+  .sidebar {
+    width: 300px; flex-shrink: 0;
+    background: var(--paper); border-right: 1px solid var(--border);
+    overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .sidebar-section { padding: 1.1rem 1.25rem 0.6rem; border-bottom: 1px solid var(--border); }
+  .section-label {
+    font-size: 0.65rem; font-weight: 500; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--warm-gray); margin-bottom: 0.65rem;
+  }
+
+  .osm-status {
+    font-size: 0.72rem; color: var(--warm-gray);
+    padding-bottom: 0.6rem; margin-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .osm-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warm-gray); flex-shrink: 0; transition: background 0.4s; }
+  .osm-dot.live { background: #4a9e5c; animation: pulse 2s infinite; }
+  .osm-dot.error { background: var(--rust); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .source-toggle { display: flex; gap: 6px; }
+  .src-btn {
+    flex: 1; padding: 0.35rem 0; border-radius: 5px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.72rem;
+    border: 1px solid var(--border); background: none; color: var(--warm-gray);
+    transition: all 0.15s;
+  }
+  .src-btn.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .cat-btn {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; background: none; border: none;
+    padding: 0.5rem 0.6rem; margin-bottom: 3px;
+    border-radius: 6px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink);
+    transition: background 0.15s; text-align: left;
+  }
+  .cat-btn:hover { background: var(--cream); }
+  .cat-btn.active { background: var(--cream); font-weight: 500; }
+  .cat-btn.inactive { opacity: 0.35; }
+  .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .cat-label { flex: 1; }
+  .cat-count { font-size: 0.73rem; color: var(--warm-gray); background: var(--cream); padding: 1px 7px; border-radius: 10px; min-width: 22px; text-align: center; }
+
+  .filter-actions { display: flex; gap: 8px; margin-bottom: 0.65rem; }
+  .filter-btn {
+    flex: 1; padding: 0.38rem; border-radius: 5px;
+    border: 1px solid var(--border); background: none;
+    font-family: 'DM Sans', sans-serif; font-size: 0.78rem; cursor: pointer; color: var(--ink);
+    transition: background 0.15s;
+  }
+  .filter-btn:hover { background: var(--cream); }
+
+  .shop-list { padding: 0 0.75rem 2rem; }
+  .shop-item {
+    padding: 0.7rem 0.5rem; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.1s; border-radius: 4px;
+  }
+  .shop-item:hover { background: var(--cream); }
+  .shop-item.hidden { display: none; }
+  .shop-name { font-size: 0.875rem; font-weight: 500; margin-bottom: 3px; color: var(--ink); }
+  .shop-meta { font-size: 0.73rem; color: var(--warm-gray); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .shop-cat-tag { padding: 1px 6px; border-radius: 3px; font-size: 0.67rem; font-weight: 500; letter-spacing: 0.02em; white-space: nowrap; }
+  .src-badge { font-size: 0.62rem; padding: 1px 5px; border-radius: 3px; background: rgba(26,22,18,0.06); color: var(--warm-gray); }
+
+  #map { flex: 1; z-index: 0; }
+
+  .leaflet-popup-content-wrapper {
+    background: var(--ink) !important; color: var(--paper) !important;
+    border-radius: 8px !important; box-shadow: var(--shadow) !important;
+    border: none !important; font-family: 'DM Sans', sans-serif !important; padding: 0 !important;
+  }
+  .leaflet-popup-content { margin: 0 !important; width: 255px !important; }
+  .leaflet-popup-tip { background: var(--ink) !important; }
+  .leaflet-popup-close-button { color: var(--warm-gray) !important; top: 10px !important; right: 10px !important; font-size: 18px !important; }
+
+  .popup-inner { padding: 1rem 1.1rem 0.9rem; }
+  .popup-cat { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; margin-bottom: 5px; opacity: 0.65; }
+  .popup-name { font-family: 'Playfair Display', serif; font-size: 1.05rem; line-height: 1.3; margin-bottom: 0.35rem; color: var(--paper); }
+  .popup-address { font-size: 0.73rem; opacity: 0.55; margin-bottom: 0.5rem; line-height: 1.45; }
+  .popup-rating { display: flex; align-items: center; gap: 6px; font-size: 0.77rem; margin-bottom: 4px; }
+  .popup-stars { color: var(--gold); letter-spacing: -1px; }
+  .popup-sep { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 0.55rem 0; }
+  .popup-detail { font-size: 0.71rem; opacity: 0.55; line-height: 1.5; margin-bottom: 3px; }
+  .popup-tags { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 3px; }
+  .popup-tag { padding: 1px 6px; border-radius: 3px; font-size: 0.64rem; font-weight: 500; }
+  .popup-osm-link { display: inline-block; margin-top: 7px; font-size: 0.68rem; color: rgba(200,146,42,0.75); text-decoration: none; }
+  .popup-osm-link:hover { color: var(--gold); text-decoration: underline; }
+
+  .legend {
+    background: var(--ink); border-radius: 8px;
+    padding: 0.75rem 1rem; box-shadow: var(--shadow);
+  }
+  .legend-title { font-size: 0.59rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warm-gray); margin-bottom: 0.5rem; font-weight: 500; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.71rem; color: var(--paper); margin-bottom: 4px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-sep { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0; }
+
+  .search-wrap { padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--border); }
+  .search-input {
+    width: 100%; padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--cream); font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem; color: var(--ink); outline: none; transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--rust); }
+  .search-input::placeholder { color: var(--warm-gray); }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .leaflet-control-attribution { font-size: 10px !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Librairies <span>de Paris</span></div>
+  <div class="header-right">
+    <div id="osm-banner">
+      <div class="spinner" id="osm-spinner"></div>
+      <span id="osm-banner-text">Chargement OpenStreetMap…</span>
+    </div>
+    <div class="header-count" id="header-count">—</div>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="sidebar">
+
+    <div class="search-wrap">
+      <input class="search-input" type="text" id="search" placeholder="Rechercher une librairie…" autocomplete="off">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Source de données</div>
+      <div class="osm-status">
+        <span class="osm-dot" id="osm-dot"></span>
+        <span id="osm-status-text">Connexion à OpenStreetMap…</span>
+      </div>
+      <div class="source-toggle">
+        <button class="src-btn active" onclick="setSource('all',this)">Toutes</button>
+        <button class="src-btn" onclick="setSource('curated',this)">Sélection</button>
+        <button class="src-btn" onclick="setSource('osm',this)">OSM live</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Catégories</div>
+      <div class="filter-actions">
+        <button class="filter-btn" onclick="toggleAll(true)">Tout afficher</button>
+        <button class="filter-btn" onclick="toggleAll(false)">Masquer tout</button>
+      </div>
+      <div id="cat-filters"></div>
+    </div>
+
+    <div class="sidebar-section" style="border-bottom:none">
+      <div class="section-label" style="margin-bottom:0">Librairies</div>
+    </div>
+    <div class="shop-list" id="shop-list"></div>
+
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─────────────────────────────────────────────
+// CATEGORIES
+// ─────────────────────────────────────────────
+const CATEGORIES = {
+  general:     { label:"Généraliste",       color:"#2d4a7a", bg:"#dce8f5" },
+  secondhand:  { label:"Occasion",          color:"#b5401c", bg:"#f7e2db" },
+  ancient:     { label:"Livres anciens",    color:"#c8922a", bg:"#f7edda" },
+  specialty:   { label:"Spécialisée",       color:"#6b3d6e", bg:"#f0e4f0" },
+  lgbtq:       { label:"LGBTQ+",            color:"#2a6b6e", bg:"#d8f0f0" },
+  children:    { label:"Jeunesse",          color:"#4a7c59", bg:"#dff0e5" },
+  bouquiniste: { label:"Bouquiniste",       color:"#8a8070", bg:"#ede8dc" },
+  english:     { label:"Anglophone",        color:"#3d5a8a", bg:"#dce5f2" },
+  library:     { label:"Bibliothèque",      color:"#5a6e5a", bg:"#e4ede4" },
+  unknown:     { label:"Autre",             color:"#999",    bg:"#f0f0f0" },
+};
+
+// ─────────────────────────────────────────────
+// CURATED DATA
+// ─────────────────────────────────────────────
+const CURATED = [
+  { id:"c1",  name:"Shakespeare and Company",    lat:48.8525632, lng:2.3471303, category:"english",     address:"37 Rue de la Bûcherie, 75005",          rating:4.6, rc:24889, hours:"Lun–Sam 10h–21h · Dim 12h–19h",        note:"Librairie anglophone fondée en 1951", tags:["English","Littérature"] },
+  { id:"c2",  name:"Ici Independent Bookstore",  lat:48.8711479, lng:2.3438029, category:"general",     address:"25 Bd Poissonnière, 75002",             rating:4.7, rc:1109,  hours:"Lun–Sam 10h–20h",                       note:"Grande librairie indépendante avec café", tags:["Café","Enfants","Romans"] },
+  { id:"c3",  name:"L'Écume des Pages",          lat:48.8541867, lng:2.3323933, category:"general",     address:"174 Bd Saint-Germain, 75006",           rating:4.6, rc:773,   hours:"Lun–Sam 10h–minuit · Dim 10h–21h",      note:"Ouverte jusqu'à minuit — rare à Paris", tags:["Littérature","Ouverture tardive"] },
+  { id:"c4",  name:"Librairie Compagnie",        lat:48.8501,    lng:2.3435454, category:"specialty",   address:"58 Rue des Écoles, 75005",              rating:4.7, rc:521,   hours:"Lun–Sam 10h–20h",                       note:"Philosophie, histoire, sciences humaines", tags:["Philosophie","Histoire"] },
+  { id:"c5",  name:"Gallimard Librairie",        lat:48.854418,  lng:2.32625,   category:"specialty",   address:"15 Bd Raspail, 75007",                  rating:4.6, rc:441,   hours:"Lun–Sam 10h–19h30",                     note:"La librairie de la maison Gallimard", tags:["Littérature française"] },
+  { id:"c6",  name:"Librairie Delamain",         lat:48.86291,   lng:2.3359518, category:"ancient",     address:"155 Rue Saint-Honoré, 75001",           rating:4.7, rc:329,   hours:"Lun–Sam 10h–20h · Dim 13h–19h",         note:"La plus ancienne librairie de Paris (1700s)", tags:["Livres anciens","Éditions rares"] },
+  { id:"c7",  name:"Chantelivre",                lat:48.8516904, lng:2.3282966, category:"children",    address:"13 Rue de Sèvres, 75006",               rating:4.7, rc:782,   hours:"Mar–Sam 10h–19h30",                     note:"Référence parisienne pour la littérature jeunesse", tags:["Jeunesse","BD"] },
+  { id:"c8",  name:"Les Mots à la Bouche",       lat:48.8629629, lng:2.3789505, category:"lgbtq",       address:"37 Rue Saint-Ambroise, 75011",          rating:4.8, rc:1219,  hours:"Lun–Dim 10h30–19h30",                   note:"La grande librairie LGBTQ+ de Paris", tags:["LGBTQ+","Romans","Art"] },
+  { id:"c9",  name:"Librairie de Paris",         lat:48.8839471, lng:2.3267589, category:"general",     address:"7-11 Pl. de Clichy, 75017",             rating:4.6, rc:1052,  hours:"Lun–Sam 10h–20h",                       note:"Grande librairie généraliste place de Clichy", tags:["Romans","Essais","Manga"] },
+  { id:"c10", name:"Librairie Les Nouveautés",   lat:48.8694917, lng:2.3691524, category:"general",     address:"45bis Rue du Faubourg du Temple, 75010", rating:4.7, rc:546,   hours:"Lun–Sam 10h–20h · Dim 11h–19h",         note:"BD, manga, romans — librairie indépendante animée", tags:["BD","Manga"] },
+  { id:"c11", name:"La Petite Lumière",          lat:48.834347,  lng:2.3291465, category:"general",     address:"14 Rue Boulard, 75014",                 rating:4.6, rc:208,   hours:"Mar–Sam 10h–19h30",                     note:"Librairie de quartier chaleureuse au 14ème", tags:["Romans"] },
+  { id:"c12", name:"Le Comptoir des Mots",       lat:48.8642897, lng:2.3987771, category:"general",     address:"239 Rue des Pyrénées, 75020",           rating:4.6, rc:446,   hours:"Mar–Sam 10h–20h",                       note:"Belle librairie de quartier dans le 20ème", tags:["Romans","Essais"] },
+  { id:"c13", name:"Livres Anciens & D'Occasion",lat:48.8485966, lng:2.3002657, category:"secondhand",  address:"129 Bd de Grenelle, 75015",             rating:5.0, rc:21,    hours:"Mar–Ven 11h30–14h30 · 17h–19h",         note:"Petite pépite — livres anciens et d'occasion", tags:["Occasion","Livres anciens"] },
+  { id:"c14", name:"Sur le Fil de Paris",        lat:48.8527141, lng:2.360639,  category:"ancient",     address:"2 Rue de l'Ave Maria, 75004",           rating:4.9, rc:49,    hours:"Lun–Ven 14h–19h · Sam 11h–19h30",       note:"Documents anciens, cartes, cartes postales", tags:["Livres anciens","Cartes"] },
+  { id:"c15", name:"Bonnefoi Livres Anciens",    lat:48.8487886, lng:2.3394574, category:"ancient",     address:"3 Rue de Médicis, 75006",               rating:4.3, rc:7,     hours:"Lun–Ven 10h–12h30 · 14h–18h30",         note:"Livres anciens et éditions rares", tags:["Livres anciens"] },
+  { id:"c16", name:"Bouquiniste Henri Ichard",   lat:48.8579813, lng:2.3449691, category:"bouquiniste", address:"Quai de la Mégisserie, 75001",          rating:4.5, rc:89,    hours:"Lun–Dim 10h30–18h (variable)",           note:"Bouquiniste historique sur les quais de la Seine", tags:["Seine","Affiches"] },
+  { id:"c17", name:"Abbey Bookshop",             lat:48.8516,    lng:2.3451,    category:"english",     address:"29 Rue de la Parcheminerie, 75005",     rating:4.5, rc:1800,  hours:"Lun–Sam 10h–19h",                       note:"Librairie canadienne-anglophone, labyrinthique", tags:["English","Occasion"] },
+  { id:"c18", name:"Librairie La Hune",          lat:48.8542,    lng:2.3315,    category:"specialty",   address:"16 Rue de l'Abbé Grégoire, 75006",     rating:4.4, rc:320,   hours:"Lun–Sam 10h–20h",                       note:"Art, architecture, design", tags:["Art","Architecture","Design"] },
+  { id:"c19", name:"Librairie Eyrolles",         lat:48.8528,    lng:2.3434,    category:"specialty",   address:"61 Bd Saint-Germain, 75005",            rating:4.5, rc:980,   hours:"Lun–Sam 9h30–19h30",                    note:"Informatique, sciences, techniques", tags:["Informatique","Sciences"] },
+  { id:"c20", name:"Gibert Joseph",              lat:48.8519,    lng:2.3461,    category:"secondhand",  address:"26 Bd Saint-Michel, 75006",             rating:4.3, rc:2100,  hours:"Lun–Sam 9h30–19h30",                    note:"Grande librairie d'occasion — manuels, romans", tags:["Occasion","Manuels"] },
+  { id:"c21", name:"Le Monte-en-l'Air",          lat:48.8671,    lng:2.3811,    category:"general",     address:"2 Rue de la Mare, 75020",               rating:4.6, rc:310,   hours:"Mar–Sam 10h–19h30",                     note:"Librairie indépendante engagée dans le 20ème", tags:["Littérature","BD"] },
+  { id:"c22", name:"Livres Anciens et Modernes", lat:48.8437858, lng:2.3421596, category:"ancient",     address:"40 Rue Gay-Lussac, 75005",              rating:5.0, rc:2,     hours:"Lun–Sam 10h–18h30",                     note:"Livres vintage, affiches, éditions illustrées", tags:["Livres anciens","Affiches"] },
+  { id:"c23", name:"Librairie Itinéraires",      lat:48.8501,    lng:2.3500,    category:"specialty",   address:"60 Rue Saint-Honoré, 75005",            rating:4.3, rc:180,   hours:"Lun–Sam 10h–19h",                       note:"Voyages, géographie, cartes du monde", tags:["Voyage","Géographie"] },
+].map(s => ({ ...s, source:'curated' }));
+
+// ─────────────────────────────────────────────
+// OSM CLASSIFIER
+// ─────────────────────────────────────────────
+function classifyOSM(tags) {
+  const name = (tags.name || '').toLowerCase();
+  const any  = Object.values(tags).join(' ').toLowerCase();
+
+  if (tags.amenity === 'library') return 'library';
+
+  if (name.includes('bouquiniste') || (tags.shop === 'books' && (name.includes('quai') || any.includes('quai')))) return 'bouquiniste';
+
+  if (tags.second_hand === 'yes' || tags.second_hand === 'only') return 'secondhand';
+  if (any.match(/\boccasion\b|\bused\b|\bgebraucht\b/)) return 'secondhand';
+
+  if (any.match(/\bancien|\bantiquarian|\brare|\boutdated/)) return 'ancient';
+
+  if (any.match(/\bjeunesse|\benfant|\bchildren|\bkinder/)) return 'children';
+
+  if (any.match(/\benglish|\banglais|\banglophone|\bshakespeare|\babbe[y]?\b/)) return 'english';
+
+  if (any.match(/\blgbtq|\blgbt\+?|\bgay\b|\bqueer|\blesbien/)) return 'lgbtq';
+
+  const specialKw = ['philosophi','droit','médecin','scienc','techniqu','informatiqu','architect','art\b','musiqu','voyage','religio','ésotér','bande dessin','comics','manga','théolog','histoir','géograph','politi','économi','univers','académi','profess'];
+  if (specialKw.some(k => new RegExp(k).test(any))) return 'specialty';
+  if (tags.subject) return 'specialty';
+
+  return 'general';
+}
+
+function osmToShop(el) {
+  const tags = el.tags || {};
+  const lat  = el.type === 'node' ? el.lat : el.center?.lat;
+  const lng  = el.type === 'node' ? el.lon : el.center?.lon;
+  if (!lat || !lng) return null;
+
+  const name    = tags.name || tags['name:fr'] || 'Librairie';
+  const addrParts = [tags['addr:housenumber'], tags['addr:street'], tags['addr:postcode']].filter(Boolean);
+  const address = addrParts.length ? addrParts.join(' ') : (tags['addr:full'] || '');
+  const hours   = tags.opening_hours || null;
+  const website = tags.website || tags['contact:website'] || '';
+  const phone   = tags.phone   || tags['contact:phone']   || '';
+  const note    = [
+    tags.description || tags['description:fr'],
+    website ? `🌐 ${website.replace(/^https?:\/\//,'')}` : null,
+    phone   ? `📞 ${phone}` : null,
+  ].filter(Boolean).join(' · ') || null;
+
+  const extraTags = ['subject','genre','books','second_hand','speciality']
+    .map(k => tags[k]).filter(Boolean).slice(0,4);
+
+  return {
+    id: `osm_${el.type}_${el.id}`,
+    name, lat, lng,
+    category: classifyOSM(tags),
+    address, rating: null, rc: null,
+    hours, note,
+    tags: extraTags,
+    source: 'osm',
+    osmUrl: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+  };
+}
+
+// ─────────────────────────────────────────────
+// MAP INIT
+// ─────────────────────────────────────────────
+const map = L.map('map', { center:[48.857, 2.347], zoom:13, zoomControl:false });
+L.control.zoom({ position:'bottomleft' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+let ALL_SHOPS = [...CURATED];
+let activeCategories = new Set(Object.keys(CATEGORIES));
+let markers = {};
+let searchQuery = '';
+let sourceFilter = 'all';
+
+// ─────────────────────────────────────────────
+// ICONS
+// ─────────────────────────────────────────────
+function makeIcon(color, small) {
+  const w = small ? 20 : 28, h = small ? 26 : 36, r = small ? 4 : 5.5;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${w}px;height:${h}px"><svg viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><path d="M14 0C6.27 0 0 6.27 0 14c0 9.625 12.5 22 14 22S28 23.625 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/><circle cx="14" cy="14" r="${r}" fill="white" fill-opacity="0.85"/></svg></div>`,
+    iconSize:[w,h], iconAnchor:[w/2,h], popupAnchor:[0,-h],
+  });
+}
+
+// ─────────────────────────────────────────────
+// POPUP
+// ─────────────────────────────────────────────
+
+async function fetchLibraryDetails(shop) {
+  if (shop.detailsLoaded) return shop;
+  try {
+    const q = `[out:json][timeout:20];(node(${shop.osmType === 'node' ? shop.osmId : ''});way(${shop.osmType === 'way' ? shop.osmId : ''});relation(${shop.osmType === 'relation' ? shop.osmId : ''}););out tags center;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(q)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const el = json.elements && json.elements[0];
+    if (!el) return shop;
+    const tags = el.tags || {};
+    shop.detailsLoaded = true;
+    shop.details = {
+      hours: tags.opening_hours || null,
+      website: tags.website || tags['contact:website'] || null,
+      phone: tags.phone || tags['contact:phone'] || null,
+      note: [tags.description || tags['description:fr'], tags.website || tags['contact:website'] ? (tags.website || tags['contact:website']).replace(/^https?:\/\//, '') : null, tags.phone || tags['contact:phone'] || null].filter(Boolean).join(' · ') || null,
+      tags: ['subject','genre','books','secondhand','speciality'].map(k => tags[k]).filter(Boolean).slice(0, 4)
+    };
+    return shop;
+  } catch (e) {
+    shop.detailsLoaded = true;
+    shop.details = {};
+    return shop;
+  }
+}
+
+function buildPopup(s) {
+  const cat   = CATEGORIES[s.category] || CATEGORIES.unknown;
+  const stars = s.rating ? ('★'.repeat(Math.round(s.rating)) + '☆'.repeat(5-Math.round(s.rating))) : null;
+  const tagsHtml = s.tags && s.tags.length
+    ? `<div class="popup-tags">${s.tags.map(t=>`<span class="popup-tag" style="background:${cat.bg};color:${cat.color}">${t}</span>`).join('')}</div>` : '';
+  const footer = s.source === 'curated'
+    ? `<span style="opacity:0.35;font-size:0.63rem">● Sélection éditoriale</span>`
+    : `<a class="popup-osm-link" href="${s.osmUrl}" target="_blank" rel="noopener">↗ Voir sur OpenStreetMap</a>`;
+  return `<div class="popup-inner">
+    <div class="popup-cat" style="color:${cat.color}">${cat.label}</div>
+    <div class="popup-name">${s.name}</div>
+    ${s.address ? `<div class="popup-address">${s.address}</div>` : ''}
+    ${stars ? `<div class="popup-rating"><span class="popup-stars">${stars}</span><span style="opacity:0.55">${s.rating} · ${s.rc.toLocaleString('fr')} avis</span></div>` : ''}
+    ${(s.hours||s.note)?'<hr class="popup-sep">':''}
+    ${s.hours ? `<div class="popup-detail">🕐 ${s.hours}</div>` : ''}
+    ${s.note  ? `<div class="popup-detail" style="margin-top:2px">${s.note}</div>` : ''}
+    <hr class="popup-sep">
+    ${footer}
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+// DEDUP: skip OSM entries too close to a curated one (~60m)
+// ─────────────────────────────────────────────
+function isDuplicate(osm) {
+  return CURATED.some(c => {
+    const dy = (c.lat - osm.lat) * 111320;
+    const dx = (c.lng - osm.lng) * 111320 * Math.cos(c.lat * Math.PI/180);
+    return Math.sqrt(dx*dx + dy*dy) < 60;
+  });
+}
+
+// ─────────────────────────────────────────────
+// RENDER A SHOP (add marker)
+// ─────────────────────────────────────────────
+function renderShop(s) {
+  if (markers[s.id]) return;
+  const cat = CATEGORIES[s.category] || CATEGORIES.unknown;
+  const m = L.marker([s.lat, s.lng], { icon: makeIcon(cat.color, s.source === 'osm') })
+    .bindPopup(buildPopup(s), { maxWidth:280 });
+  m.addTo(map);
+  markers[s.id] = m;
+}
+
+// ─────────────────────────────────────────────
+// VISIBILITY
+// ─────────────────────────────────────────────
+function visibleSet() {
+  const q = searchQuery.toLowerCase();
+  return new Set(ALL_SHOPS.filter(s => {
+    if (!activeCategories.has(s.category)) return false;
+    if (sourceFilter === 'curated' && s.source !== 'curated') return false;
+    if (sourceFilter === 'osm'     && s.source !== 'osm')     return false;
+    if (q) {
+      const hay = [s.name, ...(s.tags||[]), s.address||'', s.note||''].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).map(s => s.id));
+}
+
+function updateVisibility() {
+  const vs = visibleSet();
+  ALL_SHOPS.forEach(s => {
+    const m = markers[s.id];
+    if (!m) return;
+    if (vs.has(s.id)) { if (!map.hasLayer(m)) map.addLayer(m); }
+    else              { if ( map.hasLayer(m)) map.removeLayer(m); }
+  });
+  const n = vs.size;
+  document.getElementById('header-count').textContent = `${n} librairie${n>1?'s':''} affichée${n>1?'s':''}`;
+  document.querySelectorAll('.shop-item').forEach(el => {
+    el.classList.toggle('hidden', !vs.has(el.dataset.id));
+  });
+}
+
+// ─────────────────────────────────────────────
+// SIDEBAR — CATEGORY FILTERS
+// ─────────────────────────────────────────────
+function rebuildCatFilters() {
+  const el = document.getElementById('cat-filters');
+  el.innerHTML = '';
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const n = ALL_SHOPS.filter(s => s.category === key).length;
+    if (!n) return;
+    let btn = document.getElementById('catbtn-'+key);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'catbtn-'+key;
+      btn.className = 'cat-btn active';
+      btn.addEventListener('click', () => {
+        if (activeCategories.has(key)) {
+          activeCategories.delete(key);
+          btn.classList.replace('active','inactive');
+        } else {
+          activeCategories.add(key);
+          btn.classList.replace('inactive','active');
+        }
+        updateVisibility();
+      });
+    }
+    btn.innerHTML = `
+      <span class="cat-dot" style="background:${cat.color}"></span>
+      <span class="cat-label">${cat.label}</span>
+      <span class="cat-count">${n}</span>`;
+    el.appendChild(btn);
+  });
+}
+
+// ─────────────────────────────────────────────
+// SIDEBAR — SHOP LIST
+// ─────────────────────────────────────────────
+function rebuildList() {
+  const listEl = document.getElementById('shop-list');
+  // keep existing items, only add new ones
+  const existing = new Set([...listEl.querySelectorAll('.shop-item')].map(e => e.dataset.id));
+  const sorted = [...ALL_SHOPS].sort((a,b) => a.name.localeCompare(b.name,'fr'));
+  sorted.forEach(s => {
+    if (existing.has(s.id)) return;
+    const cat = CATEGORIES[s.category] || CATEGORIES.unknown;
+    const item = document.createElement('div');
+    item.className = 'shop-item';
+    item.dataset.id = s.id;
+    const badge = s.source === 'curated'
+      ? `<span class="src-badge" style="background:rgba(45,74,122,0.08);color:#2d4a7a">★</span>`
+      : `<span class="src-badge">OSM</span>`;
+    item.innerHTML = `
+      <div class="shop-name">${s.name}</div>
+      <div class="shop-meta">
+        <span class="shop-cat-tag" style="background:${cat.bg};color:${cat.color}">${cat.label}</span>
+        ${s.rating ? `<span>★ ${s.rating}</span>` : ''}
+        ${badge}
+      </div>`;
+    item.addEventListener('click', () => {
+      map.setView([s.lat, s.lng], 17, { animate:true });
+      markers[s.id]?.openPopup();
+    });
+    listEl.appendChild(item);
+  });
+  // Re-sort DOM to match sorted order
+  sorted.forEach(s => { const el = listEl.querySelector(`[data-id="${s.id}"]`); if (el) listEl.appendChild(el); });
+}
+
+// ─────────────────────────────────────────────
+// LEGEND
+// ─────────────────────────────────────────────
+function buildLegend() {
+  const legend = L.control({ position:'bottomright' });
+  legend.onAdd = () => {
+    const div = L.DomUtil.create('div','legend');
+    div.innerHTML = '<div class="legend-title">Catégories</div>' +
+      Object.entries(CATEGORIES).map(([k,cat]) =>
+        `<div class="legend-item" id="leg-${k}" style="display:none"><span class="legend-dot" style="background:${cat.color}"></span>${cat.label}</div>`
+      ).join('') +
+      `<hr class="legend-sep">
+       <div class="legend-item"><span class="legend-dot" style="background:#2d4a7a"></span>Sélection éditoriale</div>
+       <div class="legend-item"><span class="legend-dot" style="background:#999;opacity:0.7"></span>OpenStreetMap</div>`;
+    return div;
+  };
+  legend.addTo(map);
+}
+
+function updateLegend() {
+  Object.keys(CATEGORIES).forEach(k => {
+    const el = document.getElementById('leg-'+k);
+    if (el) el.style.display = ALL_SHOPS.some(s=>s.category===k) ? 'flex' : 'none';
+  });
+}
+
+// ─────────────────────────────────────────────
+// SOURCE FILTER
+// ─────────────────────────────────────────────
+function setSource(src, btn) {
+  sourceFilter = src;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  updateVisibility();
+}
+
+// ─────────────────────────────────────────────
+// TOGGLE ALL
+// ─────────────────────────────────────────────
+function toggleAll(state) {
+  activeCategories = state ? new Set(Object.keys(CATEGORIES)) : new Set();
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.toggle('active', state);
+    b.classList.toggle('inactive', !state);
+  });
+  updateVisibility();
+}
+
+// ─────────────────────────────────────────────
+// OVERPASS API
+// Paris bbox (S,W,N,E)
+// ─────────────────────────────────────────────
+const BBOX = '48.815,2.225,48.905,2.470';
+const QUERY = `[out:json][timeout:30];
+(
+  node["shop"="books"](${BBOX});
+  way["shop"="books"](${BBOX});
+  node["shop"="book"](${BBOX});
+  node["amenity"="library"](${BBOX});
+  way["amenity"="library"](${BBOX});
+);
+out center tags;`;
+
+async function fetchOSM() {
+  const banner     = document.getElementById('osm-banner');
+  const bannerText = document.getElementById('osm-banner-text');
+  const dot        = document.getElementById('osm-dot');
+  const statusText = document.getElementById('osm-status-text');
+
+  try {
+    bannerText.textContent = 'Interrogation Overpass API…';
+
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(QUERY),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    bannerText.textContent = 'Traitement des données…';
+    const json = await res.json();
+
+    const osmShops = (json.elements || [])
+      .map(osmToShop)
+      .filter(s => s && !isDuplicate(s));
+
+    // Merge into global list
+    ALL_SHOPS = [...CURATED, ...osmShops];
+
+    // Add markers for new OSM entries
+    osmShops.forEach(renderShop);
+
+    // Rebuild UI
+    rebuildCatFilters();
+    rebuildList();
+    updateLegend();
+    updateVisibility();
+
+    // Status: success
+    dot.classList.add('live');
+    const t = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+    statusText.textContent = `${osmShops.length} entrées OSM · MàJ ${t}`;
+    banner.classList.add('hidden');
+
+  } catch (err) {
+    console.warn('OSM fetch error:', err);
+    dot.classList.add('error');
+    statusText.textContent = 'Erreur OSM — données hors-ligne uniquement';
+    document.getElementById('osm-spinner').style.display = 'none';
+    bannerText.textContent = 'Erreur OSM';
+    setTimeout(() => banner.classList.add('hidden'), 3500);
+  }
+}
+
+// ─────────────────────────────────────────────
+// SEARCH
+// ─────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  updateVisibility();
+});
+
+// ─────────────────────────────────────────────
+// BOOT — curated data renders immediately,
+//        OSM loads asynchronously in background
+// ─────────────────────────────────────────────
+CURATED.forEach(renderShop);
+rebuildCatFilters();
+rebuildList();
+buildLegend();
+updateLegend();
+updateVisibility();
+
+fetchOSM(); // non-blocking
+</script>
+</body>
+</html>
